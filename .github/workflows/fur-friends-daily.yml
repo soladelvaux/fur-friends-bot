@@ -44,6 +44,13 @@ jobs:
         if: ${{ inputs.test_only }}
         run: python render.py ${{ steps.pick.outputs.ep }} output/test.mp4 --seconds 20
 
+      - name: Download test video
+        if: ${{ inputs.test_only }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-episode
+          path: output/test.mp4
+
       - name: TEST YouTube keys (no upload)
         if: ${{ inputs.test_only }}
         env:
@@ -51,13 +58,6 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
         run: python upload.py --check
-
-      - name: Download test video
-        if: ${{ inputs.test_only }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-episode
-          path: output/test.mp4
 
       - name: Render full episode
         if: ${{ !inputs.test_only }}
