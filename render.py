@@ -27,14 +27,20 @@ def main():
     ap.add_argument('--procs', type=int, default=max(2, cpu_count()))
     a = ap.parse_args()
     here = os.path.dirname(os.path.abspath(__file__))
-    page = 'file://' + os.path.join(here, a.episode + '_page.html')
+    own_page = os.path.join(here, a.episode + '_page.html')
+    if os.path.exists(own_page): page = 'file://' + own_page                      # Day 2-4 style
+    else: page = 'file://' + os.path.join(here, 'episode_page.html') + '?ep=' + a.episode   # Day 5+ (kit.js)
     audio_py = os.path.join(here, a.episode + '_audio.py')
+    timeline = None
     with sync_playwright() as p:
         br = p.chromium.launch(); pg = br.new_page()
         errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
         pg.add_init_script("window.__RENDER=true"); pg.goto(page); pg.wait_for_timeout(500)
-        dur = pg.evaluate("window.DUR"); br.close()
+        dur = pg.evaluate("window.DUR")
+        if not os.path.exists(audio_py): timeline = pg.evaluate("JSON.stringify(window.AUDIO || null)")
+        br.close()
         if errs: sys.exit('Episode page error: ' + errs[0])
+        if not dur: sys.exit('Episode page did not load (check the dayNNN_episode.js file name)')
     dur = min(dur, a.seconds) if a.seconds else dur
     total = int(dur * a.fps)
     tmp = tempfile.mkdtemp(prefix='frames_')
@@ -45,7 +51,11 @@ def main():
     got = len([f for f in os.listdir(tmp) if f.endswith('.jpg')])
     if got != total: sys.exit(f'Expected {total} frames, got {got}')
     wav = os.path.join(tmp, 'audio.wav')
-    subprocess.run([sys.executable, audio_py, wav], check=True)
+    if os.path.exists(audio_py): subprocess.run([sys.executable, audio_py, wav], check=True)
+    else:
+        if not timeline or timeline == 'null': sys.exit('No audio: episode has no _audio.py and no AUDIO timeline')
+        tl = os.path.join(tmp, 'timeline.json'); open(tl, 'w').write(timeline)
+        subprocess.run([sys.executable, os.path.join(here, 'audio_engine.py'), tl, wav], check=True)
     os.makedirs(os.path.dirname(os.path.abspath(a.output)), exist_ok=True)
     subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-framerate', str(a.fps), '-i', f'{tmp}/f_%05d.jpg',
                     '-i', wav, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', str(a.fps),
