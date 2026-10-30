@@ -1,9 +1,8 @@
 {
-  "queue": [
-    "day004"
-  ],
+  "queue": [],
   "posted": [
     "day002",
-    "day003"
+    "day003",
+    "day004"
   ]
 }
