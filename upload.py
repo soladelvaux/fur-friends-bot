@@ -28,8 +28,7 @@ def get_creds():
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
     creds = Credentials(None, refresh_token=tok, client_id=cid, client_secret=sec,
-                        token_uri='https://oauth2.googleapis.com/token',
-                        scopes=['https://www.googleapis.com/auth/youtube.upload'])
+                        token_uri='https://oauth2.googleapis.com/token')   # no scope limit: use whatever the token was granted
     try:
         creds.refresh(Request())
     except Exception as e:
