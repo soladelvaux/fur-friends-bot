@@ -56,7 +56,26 @@ def main():
     while resp is None:
         status, resp = req.next_chunk()
         if status: print(f'uploaded {int(status.progress()*100)}%')
-    print('Video ID:', resp['id'], ' https://youtu.be/' + resp['id'])
+    vid = resp['id']; url = 'https://youtu.be/' + vid
+    print('Video ID:', vid, ' ' + url)
+    notes = []
+    thumb = os.path.splitext(video)[0] + '_thumb.jpg'
+    if os.path.exists(thumb):
+        try:
+            yt.thumbnails().set(videoId=vid, media_body=MediaFileUpload(thumb, mimetype='image/jpeg')).execute(); notes.append('Thumbnail: set')
+        except Exception as e:
+            notes.append('Thumbnail NOT set (custom thumbnails need a verified channel: youtube.com/verify). ' + str(e)[:200])
+    pl = st.get('playlist_id', '').strip()
+    if pl:
+        try:
+            yt.playlistItems().insert(part='snippet', body={'snippet': {'playlistId': pl, 'resourceId': {'kind': 'youtube#video', 'videoId': vid}}}).execute(); notes.append('Playlist: added')
+        except Exception as e:
+            notes.append('Playlist NOT added (the refresh token needs the youtube scope, not only youtube.upload). ' + str(e)[:200])
+    for n in notes: print(n)
+    summ = os.environ.get('GITHUB_STEP_SUMMARY')
+    if summ:
+        with open(summ, 'a', encoding='utf-8') as f:
+            f.write(f"## Uploaded: {meta['title']}\n\n{url}\n\n" + ''.join(f'- {n}\n' for n in notes))
 
 if __name__ == '__main__':
     main()

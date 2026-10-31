@@ -3,5 +3,7 @@
   "category_id": "1",
   "made_for_kids": false,
   "fps": 60,
-  "notify_subscribers": true
+  "notify_subscribers": true,
+  "height": 1440,
+  "playlist_id": ""
 }

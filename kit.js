@@ -263,6 +263,22 @@ function EPISODE(cfg){
   txt(INTRO, 960, 492, 'Fur Friends', 40, '#B79BE8');
   txt(INTRO, 960, 560, cfg.title, 54, OL);
   txt(INTRO, 960, 610, `Day ${cfg.day}`, 30, '#C9A27E', 'middle', 500);
+  // picture-book paper texture over the whole frame (multiplied, under the UI)
+  if (!window.__NOPAPER){
+    const paper = mk('image', {href:'paper.jpg', x:0, y:0, width:1920, height:1080, preserveAspectRatio:'none', opacity:0.6, style:'mix-blend-mode:multiply', 'pointer-events':'none'});
+    $('stage').insertBefore(paper, UI);
+  }
+  // thumbnail helper: big title card for YouTube
+  window.thumbMode = function(){
+    show(INTRO, false); LABELS.forEach(l => show(l, false));
+    const g = G(UI);
+    mk('rect', SK({x:60, y:780, width:1100, height:230, rx:50, fill:'#FFFDF8', 'fill-opacity':0.96}, 7), g);
+    txt(g, 110, 880, 'Fur Friends · Day ' + cfg.day, 58, '#B79BE8', 'start');
+    const tt = txt(g, 110, 975, cfg.title, 92, OL, 'start');
+    try { const w = tt.getComputedTextLength(); if (w > 1000) tt.setAttribute('font-size', Math.floor(92*1000/w)); } catch(e){}
+    window.__THUMB = true;
+  };
+  window.THUMB_T = cfg.thumb !== undefined ? cfg.thumb : (SCENES[1] ? SCENES[1].t0 + 30 : 30);
   const FADES = SCENES.slice(1).map(s => s.t0);
   emitActorSfx();
   FADES.forEach(s => { sfx(s - 0.6, 'whoosh', 0.016, 0, {d: 1.2, f0: 300, f1: 1400}); sfx(s - 0.1, 'chime', 0.014, 0, {f: 784}); });
@@ -286,6 +302,7 @@ function EPISODE(cfg){
     T(INTRO, `translate(960 530) scale(${(0.92 + 0.08*sm((t - 0.5)/0.7)).toFixed(4)}) translate(-960 -530)`);
     let f = 1 - sm(t/1.4);
     FADES.forEach(p => { f = Math.max(f, 1 - sm(Math.abs(t - p)/0.8)); });
+    if (window.__THUMB){ f = 0; LABELS.forEach(l => show(l, false)); show(INTRO, false); }
     $('fade').setAttribute('opacity', f.toFixed(3));
     $('dark').setAttribute('opacity', sm((t - (DUR - 3.8))/3.6).toFixed(3));
     $('flash').setAttribute('opacity', FLASH.v.toFixed(3));
