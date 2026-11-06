@@ -81,7 +81,7 @@ function spring(c, key, target, k, d, reset){
   return s.x;
 }
 
-const OL = '#4A3631';
+const OL = '#5A3F35';   // warm sepia ink (watercolor pen line)
 const SWD = 4.6;
 const FONT = "'Noto Sans CJK JP','Noto Sans JP','Inter',sans-serif";
 const SK = (o, w) => Object.assign({stroke:OL, 'stroke-width': w || SWD, 'stroke-linejoin':'round', 'stroke-linecap':'round'}, o);

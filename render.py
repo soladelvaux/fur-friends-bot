@@ -27,6 +27,7 @@ def main():
     ap.add_argument('--seconds', type=float, default=None, help='render only the first N seconds (testing)')
     ap.add_argument('--procs', type=int, default=max(2, cpu_count()))
     ap.add_argument('--height', type=int, default=None, help='output height: 1080 or 1440 (2K). Default from settings.json')
+    ap.add_argument('--no-watercolor', action='store_true', help='skip the watercolor brush look')
     a = ap.parse_args()
     here = os.path.dirname(os.path.abspath(__file__))
     try: settings = json.load(open(os.path.join(here, 'settings.json')))
@@ -63,12 +64,24 @@ def main():
         tl = os.path.join(tmp, 'timeline.json'); open(tl, 'w').write(timeline)
         subprocess.run([sys.executable, os.path.join(here, 'audio_engine.py'), tl, wav], check=True)
     os.makedirs(os.path.dirname(os.path.abspath(a.output)), exist_ok=True)
+    wc = settings.get('watercolor', True) and not a.no_watercolor
+    W, H = int(round(1920*scale)), int(round(1080*scale))
+    vin, vmap = [], ['-map', '0:v']
+    if wc:   # Watercolor Brush look (see watercolor.py)
+        import watercolor
+        maps = watercolor.make_maps(W, H, tmp)
+        extra, graph = watercolor.ffmpeg_args(maps, W, H, first_index=2)
+        vin = extra + ['-filter_complex', graph]; vmap = ['-map', '[vwc]']
     subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-framerate', str(a.fps), '-i', f'{tmp}/f_%05d.jpg',
-                    '-i', wav, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', str(a.fps),
+                    '-i', wav] + vin + vmap + ['-map', '1:a', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', str(a.fps),
                     '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', a.output], check=True)
     shutil.rmtree(tmp, ignore_errors=True)
     print(f'Rendered {a.output} ({total} frames, {dur:.0f}s at {a.fps}fps, {int(1920*scale)}x{height})')
-    try: make_thumb(page, os.path.splitext(a.output)[0] + '_thumb.jpg')
+    try:
+        th = os.path.splitext(a.output)[0] + '_thumb.jpg'
+        make_thumb(page, th)
+        if wc:
+            import watercolor; watercolor.apply_to_image(th, th, tempfile.mkdtemp(prefix='wcth_'))
     except Exception as e: print('Thumbnail skipped:', e)
 
 def make_thumb(page, path):

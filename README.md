@@ -9,3 +9,7 @@ New episodes: upload the 4 new files, then add "dayNNN" to the end of "queue" in
 Engine v4 (Nov 2026): soft-shaded characters, paw-print aprons, ground shadows, alternating stride, head turns, idle glances/ear flicks.
 New location: locVillage() in locs4.js (Sakura Village: sakura trees, café, pastel houses, petals, butterflies, parallax).
 Preview it: python render.py village_demo output/village_demo.mp4  (not in the posting queue)
+
+Watercolor Brush look (Nov 2026): every episode is painted over in render.py by watercolor.py
+(hand-painted wobble, wet bleed, pooled edges, blotchy pigment washes, paper grain). Sepia ink lines in engine.js.
+Turn it off with "watercolor": false in settings.json, or --no-watercolor for one render.
