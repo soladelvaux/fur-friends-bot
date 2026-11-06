@@ -1,5 +1,5 @@
 /* =====================================================================
-   FUR FRIENDS — animation engine v2
+   FUR FRIENDS — animation engine v3
    Characters: Momo (cat), Pipi (bunny), Otto (otter), Kuku (squirrel)
    + NPCs (panda). Smooth motion: bendy arms, spring ears/tails,
    breathing, squash & stretch, personality-based idle energy.
@@ -48,7 +48,12 @@ function KP(t, keys){ // keyframes of points [[t,[x,y]],...]
 function rh(u,a,b,c,d){ return sm((u-a)/(b-a)) * (1 - sm((u-c)/(d-c))); }
 function bump(t, start, dur){ const u = (t-start)/dur; return (u>0 && u<1) ? Math.pow(Math.sin(Math.PI*u),2) : 0; }
 function hopF(t, t0, d, h){ const u = (t-t0)/d; return (u>0 && u<1) ? h*4*u*(1-u) : 0; }
-function blinkAt(t, per, off){ const u = mod(t+off, per)/0.18; return u < 1 ? 1 - 0.95*Math.sin(Math.PI*u) : 1; }
+function blinkAt(t, per, off){
+  const u = mod(t+off, per)/MOTION.blinkDuration;
+  if (u >= 1) return 1;
+  // Asymmetric close/open with eased eyelid motion; never collapses to zero.
+  return u < 0.42 ? 1 - 0.93*ss(u/0.42) : 0.07 + 0.93*ss((u-0.42)/0.58);
+}
 function arcP(p0, p1, v, h){ v = clamp(v,0,1); const w = sm(v); return [lerp(p0[0],p1[0],w), lerp(p0[1],p1[1],w) - h*4*v*(1-v)]; }
 function lerpP(a, b, u){ return [lerp(a[0],b[0],u), lerp(a[1],b[1],u)]; }
 // walking position from keyframes of x; returns {x, phase, amt}
@@ -60,6 +65,8 @@ function walkX(t, keys, stride){
 
 /* ---------------- simulation clock (for springs) ---------------- */
 const SIM = {t: 0, dt: 1/60, reset: true};
+// Animation tuning: conservative defaults preserve existing episode choreography.
+const MOTION = Object.freeze({walkLift: 11, walkBob: 3.2, walkSway: 2.2, breathScale: 0.009, blinkDuration: 0.22});
 function simTick(t){
   const dt = t - SIM.t;
   SIM.reset = !(dt > 0 && dt < 0.12);
@@ -69,7 +76,7 @@ function simTick(t){
 function spring(c, key, target, k, d, reset){
   let s = c.sp[key];
   if (!s || reset){ c.sp[key] = {x: target, v: 0}; return target; }
-  const n = Math.max(1, Math.ceil(SIM.dt / 0.004)), h = SIM.dt / n;
+  const n = Math.max(1, Math.ceil(Math.min(SIM.dt, 1/30) / 0.004)), h = Math.min(SIM.dt, 1/30) / n;
   for (let i=0;i<n;i++){ const a = -k*(s.x - target) - d*s.v; s.v += a*h; s.x += s.v*h; }
   return s.x;
 }
@@ -323,26 +330,37 @@ function pose(c, o){
   sq += 0.014*breath;
   if (p.tremble) hx += p.tremble*2.2*Math.sin(TAU*tt*13);
   // ---- springs (secondary motion) ----
-  const headLag = spring(c, 'hl', clamp(-vx*0.014, -9, 9), 110, 13, reset);
+  const headLag = spring(c, 'hl', clamp(-vx*0.014, -9, 9), 110, 19, reset);
   hx += headLag;
-  if (!reset && lr.hop > 2 && p.hop <= 0.5 && vh < -40){ c.sp.land = c.sp.land || {x:0, v:0}; c.sp.land.v -= 1.6; }
-  const land = spring(c, 'land', 0, 260, 11, reset && !c.sp.land);
+  if (reset) c.sp.land = {x:0, v:0};
+  if (!reset && lr.hop > 2 && p.hop <= 0.5 && vh < -40){
+    c.sp.land = c.sp.land || {x:0, v:0};
+    c.sp.land.v -= clamp(Math.abs(vh)*0.012, 0.5, 2.2);
+  }
+  const land = spring(c, 'land', 0, 260, 18, reset);
   sq += clamp(land*0.09, -0.08, 0.1) - clamp(Math.abs(vh)*0.00035, 0, 0.05);
-  const earS = spring(c, 'ear', p.ear - vx*0.035 + vt*0.11 - vh*0.05, 80, 7.5, reset);
-  const tailS = spring(c, 'tail', p.tail - vx*0.05 + vh*0.05 + (p.still ? 0 : 3*E*Math.sin(TAU*tt*0.33*E)), 45, 5.5, reset);
+  const earS = spring(c, 'ear', clamp(p.ear - vx*0.035 + vt*0.11 - vh*0.05, -24, 24), 80, 12, reset);
+  const tailS = spring(c, 'tail', clamp(p.tail - vx*0.05 + vh*0.05 + (p.still ? 0 : 3*E*Math.sin(TAU*tt*0.33*E)), -32, 32), 45, 9, reset);
   const twitch = spring(c, 'tw', vt*0.06, 140, 10, reset);
   // ---- walk ----
   let bob = 0, fl = 0, fr = 0, aL = p.aL, aR = p.aR, bt = p.bt;
+  let walkLean = 0, stepSquash = 0;
   if (p.walk !== null){
     const ph = TAU*p.walk, A = p.walkAmt;
-    fl = 12*A*Math.max(0, Math.sin(ph)); fr = 12*A*Math.max(0, -Math.sin(ph));
-    bob = 6*A*(1 - Math.cos(2*ph))/2;
-    aL += 14*A*Math.sin(ph); aR -= 14*A*Math.sin(ph);
-    tilt += 3*A*Math.sin(ph);
+    // Raised-cosine steps eliminate the hard acceleration at foot contact.
+    const lift = v => Math.pow(Math.max(0, v), 1.5);
+    fl = MOTION.walkLift*A*lift(Math.sin(ph));
+    fr = MOTION.walkLift*A*lift(-Math.sin(ph));
+    bob = MOTION.walkBob*A*(0.5 - 0.5*Math.cos(2*ph));
+    aL += 12*A*Math.sin(ph); aR -= 12*A*Math.sin(ph);
+    walkLean = MOTION.walkSway*A*Math.sin(ph);
+    stepSquash = 0.012*A*Math.cos(2*ph);
+    tilt += 1.8*A*Math.sin(ph);
   }
-  bt += clamp(vx*0.012, -6, 6);
+  bt += clamp(vx*0.012, -6, 6) + walkLean;
+  sq += stepSquash;
   T(c.root, `translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) scale(${(p.s*p.flip).toFixed(4)} ${p.s.toFixed(4)})${p.rot ? ` rotate(${p.rot} 0 -60)` : ''}`);
-  T(c.bob, `translate(0 ${(-p.hop - bob).toFixed(2)}) rotate(${bt.toFixed(2)}) scale(${(1 + sq).toFixed(4)} ${(1 - sq).toFixed(4)})`);
+  T(c.bob, `translate(0 ${(-p.hop - bob).toFixed(2)}) rotate(${bt.toFixed(2)}) scale(${(1 + sq + MOTION.breathScale*breath).toFixed(4)} ${(1 - sq - MOTION.breathScale*breath).toFixed(4)})`);
   c.footL.setAttribute('cy', (-7 - fl).toFixed(2)); c.footR.setAttribute('cy', (-7 - fr).toFixed(2));
   show(c.footL, p.feet); show(c.footR, p.feet);
   T(c.head, `translate(${hx.toFixed(2)} ${(-150 + hy).toFixed(2)}) rotate(${tilt.toFixed(2)} 0 60)`);
