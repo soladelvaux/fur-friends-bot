@@ -1,5 +1,5 @@
 /* =====================================================================
-   FUR FRIENDS — animation engine v3
+   FUR FRIENDS — animation engine v4 (soft-shaded kawaii look)
    Characters: Momo (cat), Pipi (bunny), Otto (otter), Kuku (squirrel)
    + NPCs (panda). Smooth motion: bendy arms, spring ears/tails,
    breathing, squash & stretch, personality-based idle energy.
@@ -91,13 +91,29 @@ let UID = 0;
 
 /* ================= CHARACTERS ================= */
 const PAL = {
-  cat:      {fur:'#FFFFFF', patch:'#A7A3AD', stripe:'#8A8690', inner:'#FFB7C6', arm:'#FFFFFF', foot:'#FFFFFF', energy:0.72},
+  cat:      {fur:'#FFFFFF', patch:'#A7A3AD', stripe:'#77727F', inner:'#FFB7C6', arm:'#FFFFFF', foot:'#FFFFFF', energy:0.72},
   bunny:    {fur:'#FFF8EC', inner:'#FFBFCB', arm:'#FFF8EC', foot:'#FFF8EC', energy:1.0},
   otter:    {fur:'#A6744F', muzzle:'#F5E1C8', belly:'#F5E1C8', inner:'#7C5034', arm:'#A6744F', foot:'#8E6040', energy:1.05},
   squirrel: {fur:'#EE8A46', face:'#FFF1E0', belly:'#FFF1E0', inner:'#FFC59C', tail2:'#F8B67F', arm:'#EE8A46', foot:'#E07A38', energy:1.42},
   panda:    {fur:'#FFFFFF', dark:'#423B40', inner:'#6B6168', arm:'#423B40', foot:'#423B40', energy:0.8}
 };
 const APRON = {cat:'#CDB8F2', bunny:'#FFC3D2', otter:'#AFCFF5', squirrel:'#FFD3A6', panda:'#BFE3F5'};
+// soft shading: top-left light, bottom-right shade (per species)
+const SHADE = {cat:'#BDB3CF', bunny:'#E6C2AE', otter:'#5E3A22', squirrel:'#C2551F', panda:'#B3AABB'};
+function shadeGrad(kind){
+  const id = 'shade_' + kind;
+  if (!DEFS.querySelector('#' + id)){
+    const g = mk('radialGradient', {id, cx:0.36, cy:0.28, r:0.82, fx:0.34, fy:0.24}, DEFS);
+    [[0,'#FFFFFF',0.55],[0.42,'#FFFFFF',0],[0.7,SHADE[kind],0],[1,SHADE[kind],0.55]].forEach(q => mk('stop', {offset:q[0], 'stop-color':q[1], 'stop-opacity':q[2]}, g));
+  }
+  return `url(#${id})`;
+}
+function pawPrint(parent, x, y, s, col){
+  const g = G(parent, `translate(${x} ${y}) scale(${s || 1})`);
+  mk('ellipse', {cx:0, cy:3, rx:8.5, ry:7, fill:col || '#FFFFFF'}, g);
+  [[-9,-5.5,3.4],[-3.3,-10.5,3.6],[3.3,-10.5,3.6],[9,-5.5,3.4]].forEach(q => mk('ellipse', {cx:q[0], cy:q[1], rx:q[2], ry:q[2]*1.15, fill:col || '#FFFFFF'}, g));
+  return g;
+}
 const TAILPIV = {cat:[-36,-30], bunny:[-46,-30], otter:[-30,-20], squirrel:[26,-42], panda:[-40,-28]};
 
 function drawTail(kind, g, P){
@@ -105,7 +121,8 @@ function drawTail(kind, g, P){
     const d = 'M-36 -30 C -92 -28 -120 -66 -106 -114 C -100 -136 -80 -140 -72 -126';
     mk('path', {d, fill:'none', stroke:OL, 'stroke-width':30, 'stroke-linecap':'round'}, g);
     mk('path', {d, fill:'none', stroke:P.patch, 'stroke-width':21, 'stroke-linecap':'round'}, g);
-    mk('path', {d, fill:'none', stroke:P.stripe, 'stroke-width':21, 'stroke-dasharray':'7 26', 'stroke-dashoffset':'-12'}, g);
+    mk('path', {d, fill:'none', stroke:P.stripe, 'stroke-width':21, 'stroke-dasharray':'9 20', 'stroke-dashoffset':'-10'}, g);
+    mk('path', {d, fill:'none', stroke:'#FFFFFF', 'stroke-width':6, 'stroke-linecap':'round', opacity:0.28, transform:'translate(3 -4)'}, g);
     mk('path', {d:'M-82 -132 C -78 -138 -72 -134 -72 -126', fill:'none', stroke:'#FFFFFF', 'stroke-width':12, 'stroke-linecap':'round'}, g);
   } else if (kind === 'bunny'){
     mk('circle', SK({cx:-46, cy:-30, r:21, fill:P.fur}), g);
@@ -117,7 +134,8 @@ function drawTail(kind, g, P){
   } else {
     mk('path', SK({d:'M24 -40 C 104 -36 166 -104 154 -186 C 146 -250 66 -270 44 -216 C 30 -180 66 -156 92 -178 C 108 -126 82 -88 32 -92 Z', fill:P.fur}), g);
     mk('path', {d:'M44 -62 C 110 -66 144 -124 136 -180 C 130 -220 84 -234 68 -210 C 86 -206 110 -194 110 -166 C 112 -120 88 -82 44 -76 Z', fill:P.tail2}, g);
-    mk('path', {d:'M120 -120 q10 -6 14 4 M130 -168 q10 -2 10 8', fill:'none', stroke:'#D9732F', 'stroke-width':3, 'stroke-linecap':'round'}, g);
+    mk('path', {d:'M120 -120 q10 -6 14 4 M130 -168 q10 -2 10 8 M98 -200 q8 -8 16 -2', fill:'none', stroke:'#D9732F', 'stroke-width':3, 'stroke-linecap':'round'}, g);
+    mk('path', {d:'M60 -228 C 80 -244 120 -236 132 -206', fill:'none', stroke:'#FFFFFF', 'stroke-width':7, 'stroke-linecap':'round', opacity:0.35}, g);
   }
 }
 
@@ -135,7 +153,15 @@ function drawHead(kind, c, P, id){
     mk('path', {d:'M-64 -42 L-56 -94 L-34 -66 Z', fill:P.inner}, c.earBL);
     mk('path', SK({d:'M76 -24 L62 -114 L20 -66 Z', fill:P.fur}), c.earBR);
     mk('path', {d:'M64 -42 L56 -94 L34 -66 Z', fill:P.inner}, c.earBR);
+    [[c.earBL,-1],[c.earBR,1]].forEach(q => { const k = q[1]; mk('path', SK({d:`M${k*56} -104 Q${k*50} -122 ${k*62} -130 Q${k*58} -120 ${k*70} -114 Q${k*72} -106 ${k*66} -100 Z`, fill:'#D46F32'}, 3.2), q[0]); });
     c.earPiv = [[-48,-48],[48,-48]];
+  } else if (kind === 'bunny'){
+    [c.earBL, c.earBR].forEach(e => {
+      mk('ellipse', SK({cx:0, cy:-62, rx:30, ry:66, fill:P.fur}), e);
+      mk('ellipse', {cx:2, cy:-58, rx:15, ry:48, fill:P.inner}, e);
+      mk('ellipse', {cx:-9, cy:-92, rx:5, ry:20, fill:'#FFFFFF', opacity:0.5}, e);
+    });
+    c.earL = c.earBL; c.earR = c.earBR;
   } else if (kind === 'otter' || kind === 'panda'){
     const r = kind === 'panda' ? 23 : 18, ex = kind === 'panda' ? 62 : 66;
     [c.earBL, c.earBR].forEach((g, i) => {
@@ -152,6 +178,8 @@ function drawHead(kind, c, P, id){
   if (kind === 'cat'){
     mk('ellipse', {cx:58, cy:-44, rx:50, ry:38, fill:P.patch}, inside);
     mk('ellipse', {cx:-70, cy:-58, rx:22, ry:16, fill:P.patch}, inside);
+    mk('path', {d:'M30 -76 Q32 -62 26 -52 M48 -72 Q50 -58 44 -48 M66 -64 Q66 -52 60 -44', fill:'none', stroke:P.stripe, 'stroke-width':6.5, 'stroke-linecap':'round'}, inside);
+    mk('path', {d:'M-6 -74 Q-4 -64 -8 -58', fill:'none', stroke:'#C9C5CF', 'stroke-width':5, 'stroke-linecap':'round'}, inside);
   }
   if (kind === 'squirrel'){
     mk('ellipse', {cx:-34, cy:30, rx:40, ry:36, fill:P.face}, inside);
@@ -163,15 +191,19 @@ function drawHead(kind, c, P, id){
     mk('ellipse', {cx:-34, cy:6, rx:21, ry:17, fill:P.dark, transform:'rotate(-24 -34 6)'}, inside);
     mk('ellipse', {cx:34, cy:6, rx:21, ry:17, fill:P.dark, transform:'rotate(24 34 6)'}, inside);
   }
-  mk('ellipse', {cx:-26, cy:-44, rx:26, ry:12, fill:'#FFFFFF', opacity:0.22}, h);
+  mk('ellipse', {cx:0, cy:0, rx:86, ry:72, fill:shadeGrad(kind)}, inside);
+  mk('ellipse', {cx:-30, cy:-44, rx:28, ry:13, fill:'#FFFFFF', opacity:0.32, transform:'rotate(-14 -30 -44)'}, h);
   mk('ellipse', {cx:0, cy:0, rx:86, ry:72, fill:'none', stroke:OL, 'stroke-width':SWD}, h);
+  c.face = G(h);
+  const F = c.face;
   // eyes
   const eyeCol = kind === 'panda' ? '#2A2427' : '#3A2A28';
   c.eyes = [-32, 32].map((ex, i) => {
-    const g = G(h);
+    const g = G(F);
     const open = G(g);
-    mk('ellipse', {cx:0, cy:0, rx:9.5, ry:12.5, fill:eyeCol}, open);
-    mk('circle', {cx:-3, cy:-5, r:3.9, fill:'#fff'}, open);
+    mk('ellipse', {cx:0, cy:0, rx:10.5, ry:13.5, fill:eyeCol}, open);
+    mk('ellipse', {cx:0, cy:5, rx:7, ry:6, fill:'#6B4A44', opacity:0.55}, open);
+    mk('circle', {cx:-3.4, cy:-5.4, r:4.4, fill:'#fff'}, open);
     mk('circle', {cx:3.2, cy:5, r:1.8, fill:'#fff'}, open);
     const lc = kind === 'panda' ? '#FFFFFF' : OL;
     const happy = mk('path', {d:'M-11 4 Q0 -9 11 4', fill:'none', stroke:lc, 'stroke-width':4.5, 'stroke-linecap':'round'}, g);
@@ -180,36 +212,31 @@ function drawHead(kind, c, P, id){
     const tear = mk('path', {d:'M0 14 Q-6 24 0 28 Q6 24 0 14 Z', fill:'#9FD8F7', stroke:'#5FA9D6', 'stroke-width':2}, g);
     return {g, open, happy, sleep, sq, tear, ex};
   });
-  c.brows = G(h);
+  c.brows = G(F);
   mk('path', {d:'M-46 -20 L-22 -27', stroke:OL, 'stroke-width':4, 'stroke-linecap':'round'}, c.brows);
   mk('path', {d:'M46 -20 L22 -27', stroke:OL, 'stroke-width':4, 'stroke-linecap':'round'}, c.brows);
-  c.blush = [-1,1].map(s => mk('ellipse', {cx:s*56, cy:24, rx:14, ry:8.5, fill:'#FFAFBF', opacity:0.85}, h));
-  if (kind === 'otter') mk('ellipse', SK({cx:0, cy:13, rx:10, ry:7, fill:'#4B3230'}, 3), h);
-  else if (kind === 'panda') mk('ellipse', SK({cx:0, cy:13, rx:8, ry:5.5, fill:'#423B40'}, 2.5), h);
-  else mk('ellipse', {cx:0, cy:13, rx:5.5, ry:3.8, fill:'#F28CA1'}, h);
+  c.blush = [-1,1].map(s => mk('ellipse', {cx:s*56, cy:24, rx:14, ry:8.5, fill:'#FFAFBF', opacity:0.85}, F));
+  if (kind === 'otter') mk('ellipse', SK({cx:0, cy:13, rx:10, ry:7, fill:'#4B3230'}, 3), F);
+  else if (kind === 'panda') mk('ellipse', SK({cx:0, cy:13, rx:8, ry:5.5, fill:'#423B40'}, 2.5), F);
+  else mk('ellipse', {cx:0, cy:13, rx:5.5, ry:3.8, fill:'#F28CA1'}, F);
   const my = kind === 'otter' ? 23 : 20;
   c.my = my;
-  c.mouthSmile = mk('path', {d:`M-11 ${my-2} Q-5.5 ${my+5} 0 ${my-2} Q5.5 ${my+5} 11 ${my-2}`, fill:'none', stroke:OL, 'stroke-width':3.6, 'stroke-linecap':'round', 'stroke-linejoin':'round'}, h);
-  c.mouthWavy = mk('path', {d:`M-14 ${my+1} q3.5 -5 7 0 q3.5 5 7 0 q3.5 -5 7 0 q3.5 5 7 0`, fill:'none', stroke:OL, 'stroke-width':3.4, 'stroke-linecap':'round', 'stroke-linejoin':'round'}, h);
-  c.mouthOpenG = G(h);
+  c.mouthSmile = mk('path', {d:`M-11 ${my-2} Q-5.5 ${my+5} 0 ${my-2} Q5.5 ${my+5} 11 ${my-2}`, fill:'none', stroke:OL, 'stroke-width':3.6, 'stroke-linecap':'round', 'stroke-linejoin':'round'}, F);
+  c.mouthWavy = mk('path', {d:`M-14 ${my+1} q3.5 -5 7 0 q3.5 5 7 0 q3.5 -5 7 0 q3.5 5 7 0`, fill:'none', stroke:OL, 'stroke-width':3.4, 'stroke-linecap':'round', 'stroke-linejoin':'round'}, F);
+  c.mouthOpenG = G(F);
   mk('path', {d:'M-12 0 Q0 24 12 0 Z', fill:'#E5677D', stroke:OL, 'stroke-width':3.6, 'stroke-linejoin':'round'}, c.mouthOpenG);
   mk('ellipse', {cx:0, cy:11, rx:5, ry:3.4, fill:'#FF9DB0'}, c.mouthOpenG);
-  c.mouthO = mk('ellipse', SK({cx:0, cy:my+9, rx:9, ry:12, fill:'#E5677D'}, 3.6), h);
-  c.mouthSmall = mk('ellipse', SK({cx:0, cy:my+3, rx:4.5, ry:5, fill:'#E5677D'}, 3), h);
+  c.mouthO = mk('ellipse', SK({cx:0, cy:my+9, rx:9, ry:12, fill:'#E5677D'}, 3.6), F);
+  c.mouthSmall = mk('ellipse', SK({cx:0, cy:my+3, rx:4.5, ry:5, fill:'#E5677D'}, 3), F);
   if (kind === 'cat' || kind === 'otter'){
     const wk = {fill:'none', stroke:OL, 'stroke-width':2.4, 'stroke-linecap':'round', opacity:0.75};
     [-1,1].forEach(s => {
-      mk('path', Object.assign({d:`M${s*62} 10 L${s*98} 4`}, wk), h);
-      mk('path', Object.assign({d:`M${s*62} 18 L${s*100} 20`}, wk), h);
+      mk('path', Object.assign({d:`M${s*62} 10 L${s*98} 4`}, wk), F);
+      mk('path', Object.assign({d:`M${s*62} 18 L${s*100} 20`}, wk), F);
     });
   }
   if (kind === 'bunny'){
     mk('path', SK({d:'M-20 -66 Q-14 -94 -2 -70 Q6 -98 14 -70 Q24 -92 26 -64', fill:P.fur}, 4), h);
-    c.earL = G(h); c.earR = G(h);
-    [c.earL, c.earR].forEach(e => {
-      mk('ellipse', SK({cx:0, cy:0, rx:31, ry:80, fill:P.fur}), e);
-      mk('ellipse', {cx:0, cy:12, rx:15, ry:56, fill:P.inner}, e);
-    });
   }
   // head FX
   c.sweat = mk('path', {d:'M78 -52 Q70 -36 78 -30 Q86 -36 78 -52 Z', fill:'#BFE6FF', stroke:'#6FB6E6', 'stroke-width':2.5}, h);
@@ -246,11 +273,14 @@ function makeChar(kind, parent, opts){
   const c = {kind, P, sp:{}, energy: P.energy, seed: (UID * 0.37) % 1};
   const id = 'ch' + (UID++);
   c.root = G(parent);
+  c.shadow = mk('ellipse', {cx:0, cy:-3, rx:66, ry:13, fill:'#5A3A30', opacity:0.17}, c.root);
   c.bob = G(c.root);
   c.tail = G(c.bob); drawTail(kind, c.tail, P);
   c.body = G(c.bob);
   mk('ellipse', SK({cx:0, cy:-58, rx:56, ry:56, fill:P.fur}), c.body);
   if (P.belly) mk('ellipse', {cx:0, cy:-46, rx:34, ry:36, fill:P.belly}, c.body);
+  mk('ellipse', {cx:0, cy:-58, rx:54, ry:54, fill:shadeGrad(kind)}, c.body);
+  mk('ellipse', {cx:0, cy:-84, rx:40, ry:10, fill:SHADE[kind], opacity:0.35}, c.body);
   if (kind === 'panda'){
     const cp = mk('clipPath', {id: id+'bc'}, DEFS); mk('ellipse', {cx:0, cy:-58, rx:54, ry:54}, cp);
     mk('rect', {x:-60, y:-118, width:120, height:30, fill:P.dark, 'clip-path':`url(#${id}bc)`}, c.body);
@@ -263,11 +293,15 @@ function makeChar(kind, parent, opts){
     mk('rect', S4({x:18, y:-60, width:22, height:16, rx:4, fill:'#FFFFFF'}), c.apron);
   } else {
     mk('path', S4({d:'M-34 -100 L34 -100 L42 -14 Q0 0 -42 -14 Z', fill:ac}), c.apron);
-    mk('rect', S4({x:-16, y:-58, width:32, height:20, rx:5, fill:'#FFFFFF', opacity:0.85}), c.apron);
+    mk('path', {d:'M-30 -94 L-46 -112 M30 -94 L46 -112', stroke:OL, 'stroke-width':9, 'stroke-linecap':'round'}, c.apron);
+    mk('path', {d:'M-30 -94 L-46 -112 M30 -94 L46 -112', stroke:ac, 'stroke-width':4.5, 'stroke-linecap':'round'}, c.apron);
+    mk('path', {d:'M-36 -40 Q0 -30 36 -40', fill:'none', stroke:'#FFFFFF', 'stroke-width':3, 'stroke-dasharray':'5 6', opacity:0.7}, c.apron);
+    pawPrint(c.apron, 0, -60, 1.05, '#FFFFFF');
   }
   c.sticker = mk('path', SK({d:'M0 -15 L4.5 -5 L15 -4.5 L7 3 L9.5 14 L0 8 L-9.5 14 L-7 3 L-15 -4.5 L-4.5 -5 Z', fill:'#FFD84D', transform:'translate(22 -64)'}, 3), c.body);
   c.footL = mk('ellipse', SK({cx:-27, cy:-7, rx:22, ry:13.5, fill:P.foot}), c.bob);
   c.footR = mk('ellipse', SK({cx:27, cy:-7, rx:22, ry:13.5, fill:P.foot}), c.bob);
+  c.footL.setAttribute('rx', 23); c.footR.setAttribute('rx', 23);
   c.head = G(c.bob);
   drawHead(kind, c, P, id);
   c.armL = makeArm(c, -1);
@@ -307,7 +341,7 @@ function armSet(arm, side, target, angle, rot){
 const POSE_DEF = {x:0,y:0,s:1,rot:0,hop:0,sq:0,bt:0,tilt:0,hx:0,hy:0,aL:10,aR:10,tL:null,tR:null,rotL:0,rotR:0,L:null,R:null,
   eyes:'open',eyesL:null,eyesR:null,blink:null,mouth:'smile',chew:0,walk:null,walkAmt:1,lookX:0,lookY:0,ear:0,tail:0,
   hat:false,phones:false,apron:false,feet:true,brow:false,tear:0,sweat:0,pain:0,excl:0,blushAmt:1,sticker:false,mirror:false,
-  still:false,sleep:false,tremble:0,flip:1};
+  still:false,sleep:false,tremble:0,flip:1,turn:0,shadow:true};
 function pose(c, o){
   const p = Object.assign({}, POSE_DEF, o);
   const reset = SIM.reset || c.lastT === undefined || (SIM.t - c.lastT) > 0.12 || (SIM.t - c.lastT) < 0;
@@ -326,6 +360,12 @@ function pose(c, o){
   if (!p.still){
     tilt += (p.sleep ? 1.2 : 2.2*E) * Math.sin(TAU*tt*0.09*E) + (p.sleep ? 0 : 0.9*E*Math.sin(TAU*tt*0.21*E + 1.3));
     hy += 1.4*breath;
+    // weight shift + occasional glance so idles never loop identically
+    hx += 1.6*Math.sin(TAU*tt*0.071 + 2.1);
+    if (p.walk === null && !p.sleep){
+      const gl = Math.sin(TAU*tt*0.043 + c.seed*9) + 0.6*Math.sin(TAU*tt*0.11 + 1.7);
+      p.lookX += 2.6*clamp(gl, -1, 1); p.turn += 0.22*clamp(gl, -1, 1);
+    }
   }
   sq += 0.014*breath;
   if (p.tremble) hx += p.tremble*2.2*Math.sin(TAU*tt*13);
@@ -341,16 +381,22 @@ function pose(c, o){
   sq += clamp(land*0.09, -0.08, 0.1) - clamp(Math.abs(vh)*0.00035, 0, 0.05);
   const earS = spring(c, 'ear', clamp(p.ear - vx*0.035 + vt*0.11 - vh*0.05, -24, 24), 80, 12, reset);
   const tailS = spring(c, 'tail', clamp(p.tail - vx*0.05 + vh*0.05 + (p.still ? 0 : 3*E*Math.sin(TAU*tt*0.33*E)), -32, 32), 45, 9, reset);
-  const twitch = spring(c, 'tw', vt*0.06, 140, 10, reset);
+  const flickP = 4.3 + c.seed*3.1, flick = p.sleep ? 0 : bump(mod(tt, flickP), 0, 0.28);
+  const twitch = spring(c, 'tw', vt*0.06 + 7*flick, 140, 10, reset);
+  // head turn toward travel direction (face features slide, ears counter-shift)
+  const turnS = spring(c, 'turn', clamp(p.turn + vx*0.006*p.flip, -1, 1), 70, 13, reset);
   // ---- walk ----
   let bob = 0, fl = 0, fr = 0, aL = p.aL, aR = p.aR, bt = p.bt;
-  let walkLean = 0, stepSquash = 0;
+  let walkLean = 0, stepSquash = 0, sxL = 0, sxR = 0;
   if (p.walk !== null){
     const ph = TAU*p.walk, A = p.walkAmt;
     // Raised-cosine steps eliminate the hard acceleration at foot contact.
     const lift = v => Math.pow(Math.max(0, v), 1.5);
     fl = MOTION.walkLift*A*lift(Math.sin(ph));
     fr = MOTION.walkLift*A*lift(-Math.sin(ph));
+    // alternating stride: the lifted foot swings back -> front in the travel direction
+    const dir = (vx*p.flip) < -1 ? -1 : 1;
+    sxL = -dir*9*A*Math.cos(ph); sxR = dir*9*A*Math.cos(ph);
     bob = MOTION.walkBob*A*(0.5 - 0.5*Math.cos(2*ph));
     aL += 12*A*Math.sin(ph); aR -= 12*A*Math.sin(ph);
     walkLean = MOTION.walkSway*A*Math.sin(ph);
@@ -362,6 +408,11 @@ function pose(c, o){
   T(c.root, `translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) scale(${(p.s*p.flip).toFixed(4)} ${p.s.toFixed(4)})${p.rot ? ` rotate(${p.rot} 0 -60)` : ''}`);
   T(c.bob, `translate(0 ${(-p.hop - bob).toFixed(2)}) rotate(${bt.toFixed(2)}) scale(${(1 + sq + MOTION.breathScale*breath).toFixed(4)} ${(1 - sq - MOTION.breathScale*breath).toFixed(4)})`);
   c.footL.setAttribute('cy', (-7 - fl).toFixed(2)); c.footR.setAttribute('cy', (-7 - fr).toFixed(2));
+  c.footL.setAttribute('cx', (-27 + sxL).toFixed(2)); c.footR.setAttribute('cx', (27 + sxR).toFixed(2));
+  const shOn = p.shadow && p.feet && Math.abs(p.rot) < 25 && !p.sleep;
+  show(c.shadow, shOn);
+  if (shOn){ const k = clamp(1 - (p.hop + bob)/220, 0.55, 1); T(c.shadow, `scale(${k.toFixed(3)} ${k.toFixed(3)})`); c.shadow.setAttribute('opacity', (0.17*k).toFixed(3)); }
+  T(c.face, `translate(${(13*turnS).toFixed(2)} ${(1.5*Math.abs(turnS)).toFixed(2)})`);
   show(c.footL, p.feet); show(c.footR, p.feet);
   T(c.head, `translate(${hx.toFixed(2)} ${(-150 + hy).toFixed(2)}) rotate(${tilt.toFixed(2)} 0 60)`);
   const pl = armSet(c.armL, -1, p.tL, aL, p.rotL);
@@ -394,11 +445,11 @@ function pose(c, o){
   show(c.pain, p.pain > 0.01); if (p.pain > 0.01){ c.pain.setAttribute('opacity', p.pain.toFixed(3)); T(c.pain, `translate(${(3*Math.sin(TAU*SIM.t*9)).toFixed(2)} 0)`); }
   show(c.excl, p.excl > 0.01); if (p.excl > 0.01){ c.excl.setAttribute('opacity', clamp(p.excl*2, 0, 1).toFixed(3)); T(c.excl, `translate(0 -120) scale(${(0.6 + 0.4*sm(p.excl*2)).toFixed(3)})`); }
   T(c.tail, `rotate(${tailS.toFixed(2)} ${TAILPIV[c.kind][0]} ${TAILPIV[c.kind][1]})`);
-  if (c.earL){
-    T(c.earL, `translate(-82 6) rotate(${(16 + earS + 4*breath).toFixed(2)} 0 -70)`);
-    T(c.earR, `translate(82 6) rotate(${(-16 - earS - 4*breath + 2*twitch).toFixed(2)} 0 -70)`);
+  if (c.earL){   // upright bunny ears, pivot at the base
+    T(c.earL, `translate(${(-30 - 4*turnS).toFixed(2)} -50) rotate(${(-17 - 0.8*earS - 2*breath).toFixed(2)})`);
+    T(c.earR, `translate(${(30 - 4*turnS).toFixed(2)} -50) rotate(${(17 + 0.8*earS + 2*breath + 2*twitch).toFixed(2)})`);
   }
-  if (c.earPiv){
+  if (c.earPiv && !c.earL){
     T(c.earBL, `rotate(${(-earS*0.35 - twitch).toFixed(2)} ${c.earPiv[0][0]} ${c.earPiv[0][1]})`);
     T(c.earBR, `rotate(${(earS*0.35 + twitch).toFixed(2)} ${c.earPiv[1][0]} ${c.earPiv[1][1]})`);
   }
