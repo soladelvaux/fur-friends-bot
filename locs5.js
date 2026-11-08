@@ -805,3 +805,179 @@ const SFXB = {
   arrow: (S, t, p) => { S.sfx(t, 'arrow', 0.05, p); },
   coin: (S, t, p) => { S.sfx(t, 'coin', 0.05, p); }
 };
+
+/* ------------------------------------------------------------------ */
+/* 8. SCENE BUILDERS (Day 17+) — data-driven so every episode stays     */
+/*    consistent: arrival, meet-the-new-friend, boss battle, cozy end   */
+/* ------------------------------------------------------------------ */
+// colour of each hero's magic
+const HCOL = {momo:'#C9A7FF', pipi:'#FFC2D4', otto:'#8FE0F0', kuku:'#FFB347', owli:'#FFE07A', leaf:'#A6E3A0', lumi:'#FFE07A', tora:'#FF8A5A', nyx:'#B98AF0', tutu:'#FF9DC8',
+  mori:'#8ED081', niko:'#B9D8FF', pom:'#FF8AC8', kiri:'#BFF2F2', rin:'#F2C95E', gear:'#AEB6C6', mimi:'#C9A7FF', eli:'#FF9A5A', snek:'#E9D6A8', zen:'#FFD27A'};
+// how each hero attacks in a boss fight
+const HATK = {momo:'slash', pipi:'shield', otto:'heal', kuku:'punch', owli:'bolt', leaf:'arrow', lumi:'beam', tora:'punch', nyx:'summon', tutu:'song', mori:'heal', niko:'buff',
+  pom:'throw', kiri:'summon', rin:'buff', gear:'throw', mimi:'throw', eli:'bolt', snek:'slash', zen:'punch'};
+// evenly spaced party line
+function partyLine(S, ly, ids, o){
+  o = o || {}; const n = ids.length, sp = o.sp || Math.min(170, 1150/Math.max(1, n - 1)), cx = o.cx || 700, y = o.y || 980, s = o.s || (n > 7 ? 0.9 : 1);
+  const X = ids.map((id, i) => cx + (i - (n - 1)/2)*sp);
+  const A = {}; ids.forEach((id, i) => A[id] = hero(S, id, {layer:ly, x: o.enter ? [[0, X[i] - o.enter], [o.enterT || (4 + i*0.15), X[i]], [99, X[i]]] : X[i], y: y + (i % 2)*5, s, steps: o.steps || 'grassstep'}));
+  return {A, all: ids.map(id => A[id]), X, ids};
+}
+function addPlates(S, P, lv, show){ P.all.forEach(a => S.H.plate(a, {lv, show})); }
+function setLook(keys){ return u => [K(u, keys.map(k => [k[0], k[1]])), K(u, keys.map(k => [k[0], k[2]])), K(u, keys.map(k => [k[0], k[3]]))]; }
+
+/* --- boss battle: cfg = {loc, party:[ids], boss:{type,col,name,lv,s,x,hat}, minions:[{type,col,x}], moves:[{who,t}], bonk, lv:[from,to], quest, cheer} --- */
+function bossFight(S, cfg){
+  S.L = cfg.loc(S.cam); const ly = S.L.chars;
+  (cfg.amb || [['breeze', 0.6]]).forEach(a => S.amb(a[0], 0, 45, a[1]));
+  const P = partyLine(S, ly, cfg.party, {cx: cfg.cx || 640, y: cfg.y || 980, enter: 0, steps: cfg.steps});
+  const B = cfg.boss, BX = B.x || 1500, BY = B.y || 990, BS = B.s || 1.6;
+  const boss = monster(ly, B.type, {col:B.col}); if (B.hat) B.hat(boss.body);
+  const BONK = cfg.bonk || 32;
+  const minions = (cfg.minions || []).map((m, i) => Object.assign({m: monster(ly, m.type, {col:m.col, ph:i*0.3})}, m));
+  const at = (dy) => () => { const p = boss.mid(); return [p[0] - 40, p[1] + (dy || 0)]; };
+  P.all.forEach((a, i) => { a.do('wow', 2.6 + i*0.08, 1.4); a.do('look', 2.4, 6, {x:8, y:-6}); });
+  const fx = {slash:[], bolt:[], burst:[], heal:[], shield:[], aura:[], ft:[], beam:[]};
+  let dmg = [];
+  (cfg.moves || []).forEach(mv => {
+    const A = P.A[mv.who], t = mv.t, kind = mv.kind || HATK[mv.who], col = mv.col || HCOL[mv.who], x0 = P.X[cfg.party.indexOf(mv.who)];
+    const pan = panOf(x0);
+    if (kind === 'slash'){ lunge(A, t, 1.3, BX - x0 - 220, {hop: mv.hop || 50}); strike(A, t + 0.3, {R:[110, -150], L:[100, -100]}); fx.slash.push({t:t + 0.4, at:at(0), rot:-24, col}, {t:t + 0.55, at:at(0), rot:196, col}); fx.burst.push({t:t + 0.5, at:at(0), col}); dmg.push(t + 0.5); SFXB.slash(S, t + 0.4, 0.4); SFXB.hit(S, t + 0.5, 0.4); }
+    else if (kind === 'punch'){ lunge(A, t, 1.3, BX - x0 - 240, {hop: mv.hop || 16}); strike(A, t + 0.3, {R:[120, -110], L:[60, -120]}); fx.burst.push({t:t + 0.5, at:at(20), col, s:1.3}); dmg.push(t + 0.5); SFXB.hit(S, t + 0.5, 0.4); S.sfx(t + 0.5, 'thump', 0.05, 0.4, {f:80, d:0.3}); }
+    else if (kind === 'bolt' || kind === 'throw' || kind === 'summon' || kind === 'song'){
+      A.do('arms', t, 1.8, {R:[110, -190], L:[60, -140], eyes:'squeeze', mouth:'open'}); A.do('hop', t, 0.5, {h:20});
+      const n = mv.n || (kind === 'summon' ? 3 : 2);
+      for (let k = 0; k < n; k++){ const tt = t + 0.3 + k*0.22; fx.bolt.push({t:tt, d:0.6, from:() => paw(A.c, 1).map((v, j) => v - [0, kind === 'throw' ? 20 : 120][j]), to:at(-20 + k*20), col: k % 2 ? '#FFFFFF' : col, arc: kind === 'throw' ? 220 : 120 - k*60}); fx.burst.push({t:tt + 0.6, at:at(-20 + k*20), col, s:0.9}); dmg.push(tt + 0.6);
+        (kind === 'throw' ? SFXB.boing : SFXB.zap)(S, tt, pan); SFXB.hit(S, tt + 0.6, 0.4); }
+      if (kind === 'song') S.sfx(t, 'sparkle', 0.05, pan);
+    }
+    else if (kind === 'arrow'){ A.do('arms', t, 2.0, {L:[110, -140], R:[40, -140], eyes:'squeeze', mouth:'open'}); for (let k = 0; k < 3; k++){ const tt = t + 0.3 + k*0.25; fx.bolt.push({t:tt, d:0.45, shape:'arrow', from:() => paw(A.c, -1), to:at(-30 + k*25), arc:30}); fx.burst.push({t:tt + 0.45, at:at(-30 + k*25), col, s:0.7}); dmg.push(tt + 0.45); SFXB.arrow(S, tt, pan); SFXB.hit(S, tt + 0.45, 0.4); } }
+    else if (kind === 'shield'){ A.do('arms', t, 2.4, {L:[80, -110], R:[90, -170], eyes:'squeeze', mouth:'open'}); fx.shield.push({t, d:2.4, at:() => [x0 + 100, (cfg.y || 980) + 5], hit:t + 0.8, col, s: mv.big ? 3.6 : 1.2}); fx.ft.push({t:t + 0.9, at:[x0 + 80, 720], text: mv.text || 'BLOCK!', col}); SFXB.shield(S, t + 0.8, pan); }
+    else if (kind === 'heal'){ A.do('arms', t, 2.2, {R:[80, -190], eyes:'happy', mouth:'open'}); P.all.forEach(b => fx.heal.push({t:t + 0.3, d:2.0, at:() => [b.X(t), (cfg.y || 980)], col})); fx.ft.push({t:t + 0.8, at:[cfg.cx || 640, 680], text: mv.text || '+HP ALL', col:'#8FE0A8'}); SFXB.heal(S, t + 0.3, pan); }
+    else if (kind === 'buff'){ A.do('arms', t, 2.2, {R:[90, -190], L:[60, -150], eyes:'happy', mouth:'open'}); P.all.forEach(b => fx.aura.push({t:t + 0.2, d:2.2, at:() => [b.X(t), (cfg.y || 980)], col})); fx.ft.push({t:t + 0.8, at:[cfg.cx || 640, 680], text: mv.text || 'ATK UP!', col}); S.sfx(t + 0.2, 'sparkle', 0.06, pan); }
+    else if (kind === 'beam'){ A.do('arms', t, 2.6, {R:[90, -200], L:[60, -150], eyes:'squeeze', mouth:'open'}); fx.beam.push(t + 0.4); dmg.push(t + 0.8); S.sfx(t + 0.4, 'heal', 0.05, 0.4); SFXB.hit(S, t + 0.8, 0.4); }
+    if (mv.text && kind !== 'shield' && kind !== 'heal' && kind !== 'buff') fx.ft.push({t:t + 0.9, at:() => boss.top().map((v, k) => v - [0, 30][k]), text: mv.text, col, size:50});
+  });
+  fx.burst.push({t:BONK, at:at(0), col:'#FFE07A', s:1.8}); fx.ft.push({t:BONK + 0.2, at:() => boss.top().map((v, k) => v - [0, 60][k]), text: cfg.finale || 'FRIENDSHIP COMBO!', size:58});
+  (cfg.hurt || []).forEach(h => { const A = P.A[h.who]; A.do('pose', h.t, 1.6, {eyes:'squeeze', mouth:'wavy', bt:-10, sweat:1, tremble:0.5}); fx.burst.push({t:h.t, at:() => [A.X(h.t), 860], s:0.7, col:'#FFFFFF'}); fx.ft.push({t:h.t + 0.1, at:() => [A.X(h.t), 720], text: h.text || '-5', col:'#FF8A8A'}); SFXB.hit(S, h.t, panOf(A.X(h.t))); });
+  // finale: everyone attacks at once
+  P.all.forEach((a, i) => { a.do('arms', BONK - 1.2, 1.6, {R:[110, -180], L:[80, -130], eyes:'squeeze', mouth:'open'}); a.do('hop', BONK - 1.0 + i*0.05, 0.5, {h:30}); });
+  P.all.forEach((a, i) => { a.do('cheer', BONK + 3.4 + i*0.08, 2.4); a.do('happy', BONK + 6, 45, {mouth:'open'}); });
+  if (cfg.cheer) cfg.cheer(P, BONK);
+  S.H = hud(S);
+  const [lv0, lv1] = cfg.lv; const LVT = BONK + 3.4;
+  addPlates(S, P, lv0, u => u < LVT); addPlates(S, P, lv1, u => u >= LVT);
+  S.H.monPlate(boss, B.name, B.lv || lv0 + 3); { const pl = S.H.plates[S.H.plates.length - 1]; pl.o.show = u => u > 2 && u < BONK + 2; pl.o.hp = u => clamp(1 - dmg.filter(d => u > d).length*0.5/Math.max(1, dmg.length) - 0.5*sm((u - BONK)/0.6), 0, 1); }
+  S.H.quest(cfg.quest || B.name, [{text: cfg.task || ('Calm the ' + B.name), done:BONK + 1}].concat(cfg.task2 ? [{text:cfg.task2, done:BONK + 5}] : []), 2.4, 44.6);
+  S.H.banner(LVT, 'LEVEL UP!', `Lv ${lv0} → Lv ${lv1}`, '#F2B33E', 3.4);
+  const lvAura = auraFx(S.L.fx, P.all.map(a => ({t:LVT, d:2.8, at:() => [a.X(LVT), cfg.y || 980], col:'#FFE07A'})));
+  const F = {slash: slashFx(S.L.fx, fx.slash), bolt: boltFx(S.L.fx, fx.bolt), burst: burstFx(S.L.fx, fx.burst), heal: healFx(S.L.fx, fx.heal), shield: shieldFx(S.L.fx, fx.shield), aura: auraFx(S.L.fx, fx.aura), ft: floatTxt(S.L.fx, fx.ft)};
+  const beam = G(S.L.fx); mk('rect', {x:-80, y:-1400, width:160, height:1400, fill:'url(#glowW)'}, beam); mk('rect', {x:-30, y:-1400, width:60, height:1400, fill:'#FFF6D0', opacity:0.8}, beam);
+  const hearts = heartBursts(S.L.fx, [{t:BONK + 1.8, x:BX, y:700, n:6}, {t:BONK + 7, x:cfg.cx || 640, y:680, n:5}]);
+  P.all.forEach((a, i) => SFXB.zap(S, BONK - 0.9 + i*0.05, 0)); SFXB.hit(S, BONK, 0.5); S.sfx(BONK + 0.4, 'chime', 0.03, 0.5, {f:1568}); SFXB.levelup(S, LVT);
+  (cfg.stomps || []).forEach(t => S.sfx(t + 0.25, 'thump', 0.07, 0.4, {f:70, d:0.4}));
+  if (cfg.extraSfx) cfg.extraSfx(S);
+  S.look = cfg.look || setLook([[0, 900, 720, 1.0], [8, 1050, 720, 1.06], [BONK - 4, 1000, 730, 1.08], [BONK, 1100, 720, 1.12], [BONK + 4, 960, 740, 1.04], [45, 960, 740, 1.1]]);
+  S.pre = u => S.L.update(u, {camX: S.look(u)[0]});
+  S.post = u => {
+    const ent = sm((u - 1.0)/2.4), stomp = (cfg.stomps || []).reduce((s2, t) => s2 + hopF(u, t, 0.5, 40), 0);
+    const bx = lerp(2300, BX, ent) + (B.dx ? B.dx(u) : 0);
+    boss.set(u, {x:bx, y:BY, s:BS, hop:stomp, hit: dmg.reduce((s2, d) => s2 + 0.6*bump(u, d, 0.35), 0) + bump(u, BONK, 0.6) + fx.shield.reduce((s2, sh) => s2 + 0.4*bump(u, sh.hit, 0.3), 0),
+      face: u > BONK && u < BONK + 2.4 ? 'dizzy' : (u > BONK ? 'happy' : 'mad')});
+    minions.forEach((q, i) => { const h = q.bonk || 99; q.m.set(u, {x: lerp(2200, q.x, sm((u - 1.4 - i*0.3)/2)) + 500*sm((u - h - 2)/1.4), y: q.y || 985, s: q.s || 0.8, hit: bump(u, h, 0.4), face: u > h && u < h + 1 ? 'dizzy' : (u > h ? 'happy' : 'mad'), alpha: u < 1.4 ? 0 : 1, flip: u > h + 2 ? 1 : -1}); });
+    const ba = fx.beam.reduce((s2, t) => Math.max(s2, rh(u, t, t + 0.4, t + 1.4, t + 2.0)), 0); show(beam, ba > 0.01);
+    if (ba > 0.01){ const p = boss.mid(); T(beam, `translate(${p[0].toFixed(1)} ${(p[1] + 120).toFixed(1)}) scale(${(0.5 + 0.5*ba).toFixed(3)} 1)`); beam.setAttribute('opacity', ba.toFixed(3)); }
+    Object.values(F).forEach(f => f(u)); lvAura(u); hearts(u);
+    FLASH.v = Math.max(FLASH.v, 0.3*bump(u, BONK, 0.5));
+    if (cfg.post) cfg.post(u, P, boss);
+    S.H.update(u); S.H.post(u);
+  };
+  return {P, boss, BONK};
+}
+
+/* --- meet the new friend: cfg = {loc, party, newbie, nx, intro(u-hooks), demo:{t, kind, text}, cardT} --- */
+function meetScene(S, cfg){
+  S.L = cfg.loc(S.cam); const ly = S.L.chars;
+  (cfg.amb || [['room', 0.6]]).forEach(a => S.amb(a[0], 0, 45, a[1]));
+  const P = partyLine(S, ly, cfg.party, {cx: cfg.cx || 600, y: cfg.y || 980, enter: 900, steps: cfg.steps || 'woodstep'});
+  const NX = cfg.nx || 1300; const N = hero(S, cfg.newbie, Object.assign({layer:ly, x:NX, y:(cfg.y || 980) + 5}, cfg.nopts || {}));
+  P.all.forEach((a, i) => { a.do('look', 6, 18, {x:8, y:-2}); a.do('wow', 7.0 + i*0.1, 1.4); });
+  N.do('wow', 6.6, 1.4); N.do('wave', 9.0, 2.4); N.do('talk', 12.0, 5.0, {gest:true});
+  P.all.forEach((a, i) => a.do('nod', 13 + i*0.15, 1.6));
+  const D = cfg.demo || {t:22}; const DT = D.t || 22, kind = D.kind || HATK[cfg.newbie], col = HCOL[cfg.newbie];
+  N.do('arms', DT, 2.2, {R:[110, -190], L:[70, -140], eyes:'squeeze', mouth:'open'}); N.do('hop', DT, 0.5, {h:24});
+  P.all.forEach((a, i) => { a.do('wow', DT + 1.2 + i*0.1, 1.4); a.do('cheer', DT + 6 + i*0.1, 2.4); a.do('happy', DT + 9, 30, {mouth:'open'}); });
+  const CT = cfg.cardT || DT + 5.6;
+  N.do('shy', CT + 0.4, 2.0); N.do('cheer', CT + 3, 2.4); N.do('happy', CT + 6, 30, {mouth:'open'});
+  if (cfg.acts) cfg.acts(P, N);
+  const dummy = monster(ly, cfg.target || 'dummy', {col: cfg.targetCol}); const TX = cfg.tx || 1680;
+  const fxl = [], bur = [{t:DT + 0.9, at:[TX, 860], col, s:1.3}];
+  if (kind === 'punch' || kind === 'slash'){ lunge(N, DT, 1.3, TX - NX - 200, {hop: kind === 'slash' ? 50 : 16}); }
+  else fxl.push({t:DT + 0.3, d:0.6, shape: kind === 'arrow' ? 'arrow' : null, from:() => paw(N.c, kind === 'arrow' ? -1 : 1).map((v, j) => v - [0, kind === 'arrow' ? 0 : 120][j]), to:() => [TX, 860], col, arc:80});
+  const bolt = boltFx(S.L.fx, fxl), burst = burstFx(S.L.fx, bur), aura = auraFx(S.L.fx, [{t:DT - 0.2, d:2.0, at:() => [NX, (cfg.y || 980)], col}]);
+  const ft = floatTxt(S.L.fx, [{t:DT + 1.0, at:[TX, 700], text: D.text || SKILLS[cfg.newbie][0].toUpperCase() + '!', col, size:50}]);
+  S.H = hud(S); addPlates(S, P, cfg.lv, u => u > 5.6); S.H.plate(N, {lv:cfg.lv, show: u => u > CT});
+  S.H.card(CT, cfg.newbie, {d:6.2, x: cfg.cardX || 100, y:150});
+  const hearts = heartBursts(S.L.fx, [{t:CT + 3, x:NX, y:640, n:5}]);
+  (kind === 'punch' ? SFXB.hit : (kind === 'arrow' ? SFXB.arrow : SFXB.zap))(S, DT + 0.3, 0.6); SFXB.hit(S, DT + 0.9, 0.7); S.sfx(CT, 'chime', 0.03, 0, {f:1568}); SFXB.levelup(S, CT + 0.2);
+  S.look = cfg.look || setLook([[0, 820, 720, 1.05], [7, 1200, 720, 1.35], [18, 1200, 720, 1.3], [DT - 1, 1150, 720, 1.05], [DT + 4, 1000, 720, 1.05], [45, 960, 720, 1.1]]);
+  S.pre = u => S.L.update(u, {camX: S.look(u)[0]});
+  S.post = u => {
+    dummy.set(u, {x:TX, y:(cfg.y || 980) - 10, s:0.9, hit: bump(u, DT + 0.9, 0.5), face: u > DT + 0.9 && u < DT + 2.2 ? 'dizzy' : 'happy', rot: 12*bump(u, DT + 0.9, 0.8)});
+    bolt(u); burst(u); aura(u); ft(u); hearts(u);
+    if (cfg.post) cfg.post(u, P, N);
+    S.H.update(u); S.H.post(u);
+  };
+  return {P, N};
+}
+
+/* --- cozy ending with a teaser card: cfg = {loc, ids, snack:'mug'|'stick'|'cake', next, nextTag, festival, acts} --- */
+function cozyEnd(S, cfg){
+  S.L = cfg.loc(S.cam); const ly = S.L.chars;
+  (cfg.amb || [['night', 0.8]]).forEach(a => S.amb(a[0], 0, 45, a[1]));
+  const n = cfg.ids.length, half = Math.ceil(n/2), X = cfg.X || cfg.ids.map((id, i) => i < half ? 960 - 120 - (half - 1 - i)*(n > 8 ? 120 : 145) : 960 + 120 + (i - half)*(n > 8 ? 120 : 145));
+  const A = {}; cfg.ids.forEach((id, i) => A[id] = hero(S, id, {layer:ly, x:X[i], y:cfg.y || 985, s: n > 8 ? 0.88 : 1}));
+  const all = Object.values(A);
+  const sn = cfg.snack || 'mug';
+  const mc = ['#FFB3C7', '#C7B3F5', '#9FA6F0', '#FFB47A', '#9FC8F0', '#A6E3A0', '#FFE07A'];
+  if (sn === 'mug') all.forEach((a, i) => { a.item('L', 'mug', itMug(G(), mc[i % mc.length], '#8B5A3C')); a.do('hold', 0, 45, {side:'L', item:'mug', at:[30, -76], ease:false}); a.do('sip', 3.0 + i*0.7, 2.0, {side:'L', item:'mug'}); });
+  if (sn === 'stick'){ const st = all.map((a, i) => a.item(X[i] < 960 ? 'R' : 'L', 'stick', itStick(G(null, X[i] < 960 ? '' : 'scale(-1 1)')))); all.forEach((a, i) => { const sd = X[i] < 960 ? 'R' : 'L'; a.do('hold', 1.0, 15.0, {side:sd, item:'stick', at:[66, -96]}); a.do('eat', 16.4 + i*0.25, 5.0, {side:sd, item:'stick', bites:2, per:2.4, snd:'squish', rest:[66, -96]}); }); S.mallows = st.map(s => s.m); }
+  if (sn === 'cake') all.forEach((a, i) => { a.item('L', 'cake', itCupcake(G(), mc[i % mc.length])); a.do('eat', 4.0 + i*0.5, 6.0, {side:'L', item:'cake', per:2.8, snd:'squish'}); });
+  if (cfg.festival) all.forEach((a, i) => a.do('dance', 12 + i*0.15, 9, {bpm:[1.0, 1.2, 0.9, 1.3, 1.1][i % 5]}));
+  if (cfg.acts) cfg.acts(A, all);
+  const TT = cfg.teaserT || 30;
+  all.forEach((a, i) => { a.do('look', TT - 0.6, 6, {x:0, y:-10}); a.do('wow', TT + 0.2 + i*0.08, 1.4); a.do('wave', TT + 8 + i*0.1, 4.4); a.do('happy', TT + 12.6, 3, {mouth:'open'}); });
+  S.H = hud(S);
+  if (cfg.banner) S.H.banner(cfg.banner[0], cfg.banner[1], cfg.banner[2], '#7DC77A', 3.6), SFXB.levelup(S, cfg.banner[0]);
+  if (cfg.next) S.H.card(TT, cfg.next, {tag:'✦ NEXT TIME: ' + cfg.nextTag + ' ✦', d:7.2, x:740, y:110});
+  const steams = sn === 'mug' ? all.map(() => steam(S.L.fx, 2)) : [];
+  const hearts = heartBursts(S.L.fx, [{t:10, x:960, y:680, n:5}, {t:TT + 9, x:960, y:660, n:6}]);
+  const fw = cfg.festival ? burstFx(S.L.fx, [12, 13.4, 15, 16.6, 18.4, 20].map((t, i) => ({t, at:[300 + i*260, 160 + (i % 3)*60], col:['#FFE07A', '#FF9DB5', '#9FD8F7', '#C9A7FF'][i % 4], s:1.4}))) : null;
+  if (cfg.festival) [12, 13.4, 15, 16.6, 18.4, 20].forEach((t, i) => { S.sfx(t, 'pop', 0.05, -0.6 + i*0.24); S.sfx(t + 0.1, 'sparkle', 0.03, -0.6 + i*0.24); });
+  if (cfg.next) S.sfx(TT, 'chime', 0.03, 0, {f:1568});
+  S.look = cfg.look || setLook([[0, 960, 740, 1.15], [TT - 2, 960, 740, 1.22], [TT + 1, 960, 700, 1.12], [45, 960, 720, 1.2]]);
+  S.pre = u => S.L.update(u, cfg.upd ? cfg.upd(u) : {camX:960, fire:1});
+  S.post = u => {
+    if (S.mallows) S.mallows.forEach(m => m.setAttribute('fill', hexMix('#FFF7EE', '#E8B06A', sm((u - 2)/12))));
+    all.forEach((a, i) => { if (steams[i]){ const p = paw(a.c, -1); steams[i](p[0], p[1] - 24, u + i, 0.5, 8); } });
+    hearts(u); if (fw) fw(u);
+    if (cfg.post) cfg.post(u, A);
+    S.H.update(u); S.H.post(u);
+  };
+  return {A, all};
+}
+
+/* --- arrival / discovery: cfg = {loc, party, quest, tasks, look, acts, post} --- */
+function arrival(S, cfg){
+  S.L = cfg.loc(S.cam); const ly = S.L.chars;
+  (cfg.amb || [['birds', 0.5], ['breeze', 0.6]]).forEach(a => S.amb(a[0], 0, 45, a[1]));
+  const P = partyLine(S, ly, cfg.party, {cx: cfg.cx || 760, y: cfg.y || 980, enter: 1100, steps: cfg.steps});
+  P.all.forEach((a, i) => { a.do('look', 9, 5, {x:6, y:-8}); a.do('wow', 9.6 + i*0.12, 1.4); });
+  if (cfg.acts) cfg.acts(P);
+  S.H = hud(S); addPlates(S, P, cfg.lv, u => u > 5 && u < (cfg.platesOff || 45));
+  if (cfg.quest) S.H.quest(cfg.quest, cfg.tasks, 3.0, 44.6);
+  S.look = cfg.look || setLook([[0, 700, 760, 1.1], [10, 900, 740, 1.05], [45, 960, 740, 1.1]]);
+  S.pre = u => S.L.update(u, {camX: S.look(u)[0]});
+  S.post = u => { if (cfg.post) cfg.post(u, P); S.H.update(u); S.H.post(u); };
+  return P;
+}
