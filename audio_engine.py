@@ -123,6 +123,45 @@ SFX = {
     'click': lambda o: click(), 'jar': lambda o: jar_clink(), 'scratch': lambda o: scratch(o.get('d', 0.6)), 'printer': lambda o: printer(o.get('d', 1.0)),
 }
 
+# ---------------- Battle Edition one-shots (Day 13+), soft so they sit under the lofi ----------------
+def b_slash():
+    d = 0.28; n = int(d*SR); tt = np.arange(n)/SR; f = 5200 - 3800*tt/d
+    return norm(bp(noise(d), 1800, 9000)*np.exp(-tt*16) + 0.25*np.sin(TAU*np.cumsum(f)/SR)*np.exp(-tt*22))
+def b_hit():
+    d = 0.3; n = int(d*SR); tt = np.arange(n)/SR
+    return norm(np.sin(TAU*np.cumsum(140*np.exp(-tt*18) + 55)/SR)*np.exp(-tt*14) + 0.6*lp(noise(d), 1800)*np.exp(-tt*35))
+def b_zap():
+    d = 0.5; n = int(d*SR); tt = np.arange(n)/SR; f = 900 + 1500*np.exp(-tt*8)
+    return norm((np.sin(TAU*np.cumsum(f)/SR) + 0.4*np.sin(TAU*np.cumsum(f*1.5)/SR))*np.exp(-tt*6) + 0.2*hp(noise(d), 4000)*np.exp(-tt*10))
+def b_heal():
+    x = np.zeros(int(1.6*SR))
+    for i, f in enumerate([1046.5, 1318.5, 1568, 2093, 2637]):
+        b = bell(f, 1.0); s = int(i*0.09*SR); x[s:s+len(b)] += b[:len(x)-s]*(0.9 - 0.1*i)
+    return norm(x)
+def b_shield():
+    d = 1.0; tt = np.arange(int(d*SR))/SR
+    return norm(sum(a*np.sin(TAU*f*tt)*np.exp(-tt*k) for f, a, k in [(660, 1, 4), (1650, 0.5, 6), (2480, 0.3, 8)]) + 0.3*bp(noise(d), 2000, 6000)*np.exp(-tt*30))
+def b_levelup():
+    x = np.zeros(int(2.2*SR))
+    for i, f in enumerate([523.3, 659.3, 784, 1046.5, 1318.5, 1568]):
+        b = bell(f, 1.2); s = int(i*0.1*SR); x[s:s+len(b)] += b[:len(x)-s]
+    tt = np.arange(len(x))/SR; x += 0.25*np.sin(TAU*1046.5*tt)*np.exp(-np.maximum(tt - 0.6, 0)*3)*(tt > 0.6)
+    return norm(x)
+def b_boing():
+    d = 0.35; n = int(d*SR); tt = np.arange(n)/SR; f = 220 + 260*np.sin(np.pi*tt/d)
+    return norm(np.sin(TAU*np.cumsum(f)/SR)*np.sin(np.pi*tt/d))
+def b_portal():
+    d = 2.2; n = int(d*SR); tt = np.arange(n)/SR; f = 200 + 900*tt/d
+    x = np.sin(TAU*np.cumsum(f)/SR)*(0.5 + 0.5*np.sin(TAU*6*tt)) + 0.5*bp(noise(d), 600, 5000)
+    return norm(x*np.sin(np.pi*tt/d))
+def b_arrow():
+    d = 0.4; n = int(d*SR); tt = np.arange(n)/SR
+    return norm(np.sin(TAU*180*tt)*np.exp(-tt*30) + bp(noise(d), 2500, 8000)*np.sin(np.pi*tt/d)*0.7)
+def b_coin():
+    return norm(bell(1975.5, 0.5) + 0.8*np.concatenate([np.zeros(int(0.07*SR)), bell(2637, 0.5)])[:int(0.5*SR)])
+SFX.update({'slash': lambda o: b_slash(), 'hit': lambda o: b_hit(), 'zap': lambda o: b_zap(), 'heal': lambda o: b_heal(), 'shield': lambda o: b_shield(),
+            'levelup': lambda o: b_levelup(), 'boing': lambda o: b_boing(), 'portal': lambda o: b_portal(), 'arrow': lambda o: b_arrow(), 'coin': lambda o: b_coin()})
+
 # ---------------- ambiences (each returns mono-ish pair at unit level) ----------------
 def a_room():
     x = norm(lp(rng.standard_normal(N), 500)); return 0.007*x, 0.007*np.roll(x, 999)
